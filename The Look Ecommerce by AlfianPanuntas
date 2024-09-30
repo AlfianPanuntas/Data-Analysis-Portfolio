@@ -1,0 +1,136 @@
+#QUESTION-1 Find  Top 10 customers with the highest average price per order (time frame Jan 2019 - Dec 2022)
+SELECT u.id as user_id, u.first_name, u.last_name, avg(oi.sale_price) as avg_sale_price
+FROM `bigquery-public-data.thelook_ecommerce.users` as u
+JOIN `bigquery-public-data.thelook_ecommerce.order_items` as oi
+ON u.id = oi.user_id
+WHERE DATE(oi.created_at) BETWEEN '2022-01-01' AND '2022-12-30'
+GROUP BY 1,2,3
+ORDER BY avg_sale_price DESC
+LIMIT 10 ;
+
+#QUESTION-2 Create a query to get the total users who completed the order and total orders per month (time frame Jan 2019 - Apr 2022)
+SELECT
+    FORMAT_DATE('%b-%Y', created_at) AS Month,
+    COUNT(DISTINCT user_id) AS Total_Users,
+    COUNT(order_id) AS Total_Orders
+FROM `bigquery-public-data.thelook_ecommerce.orders`
+WHERE status = 'Complete'
+    AND delivered_at IS NOT NULL
+    AND created_at BETWEEN '2019-01-01' AND '2022-12-31'
+GROUP BY Month
+ORDER BY PARSE_DATE('%b-%Y', Month);
+
+#QUESTION-3 Create a query to get average order value and total number of unique users, grouped by month (time frame Jan 2019 - Dec 2022)
+SELECT
+      FORMAT_DATETIME('%b-%Y', orders.created_at) AS Month,
+      ROUND(SUM(order_items.sale_price)/COUNT(orders.order_id),2) AS AOV,
+      COUNT (DISTINCT orders.user_id) Distinct_User
+FROM `bigquery-public-data.thelook_ecommerce.orders` orders
+INNER JOIN `bigquery-public-data.thelook_ecommerce.order_items` order_items
+ON orders.order_id = order_items.order_id
+WHERE orders.status = 'Complete'
+      AND orders.delivered_at IS NOT NULL
+      AND orders.created_at BETWEEN '2019-01-01' AND '2022-12-31'
+GROUP BY Month
+ORDER BY PARSE_DATE('%b-%Y', Month);
+
+#QUESTION-4 Find the first and last name of users from the youngest and oldest age of each gender (time frame Dec 2022 ).
+WITH youngest_user AS
+(SELECT  first_name, last_name, gender, age,
+FROM `bigquery-public-data.thelook_ecommerce.users`
+WHERE created_at BETWEEN '2022-12-01' AND '2022-12-31'
+AND age = 
+      (SELECT MIN(age),
+       FROM `bigquery-public-data.thelook_ecommerce.users`)), 
+oldest_user AS
+(SELECT first_name, last_name, gender, age
+FROM `bigquery-public-data.thelook_ecommerce.users`
+WHERE created_at BETWEEN '2022-12-01' AND '2022-12-31'
+AND age = 
+      (SELECT MAX(age),
+       FROM `bigquery-public-data.thelook_ecommerce.users`))
+SELECT *
+FROM youngest_user
+UNION DISTINCT
+SELECT *
+FROM oldest_user
+ORDER BY gender;
+
+#QUESTION-5 Get the top 5 most profitable product and its profit detail breakdown by month (time frame Jan 2019 - Dec 2022) .
+WITH profit_calculation AS 
+(SELECT
+       FORMAT_DATE('%b-%Y', order_items.created_at) Month,
+       inventory_items.product_id product_id,
+       inventory_items.product_name,
+       ROUND(SUM(inventory_items.product_retail_price),2) Sales,
+       ROUND(SUM(inventory_items.cost),2) cost,
+       ROUND(SUM((inventory_items.product_retail_price-inventory_items.cost)),2) Profit
+ FROM  `bigquery-public-data.thelook_ecommerce.order_items` order_items
+ LEFT JOIN
+      `bigquery-public-data.thelook_ecommerce.inventory_items` inventory_items
+ ON   order_items.inventory_item_id = inventory_items.id
+WHERE order_items.created_at BETWEEN '2019-01-01' AND '2022-12-31'
+ GROUP BY
+      month, product_id, product_name
+ ORDER BY
+      PARSE_DATE('%b-%Y', Month), Profit ASC)
+SELECT *
+FROM   
+(SELECT*,DENSE_RANK()OVER(PARTITION BY profit_calculation.Month ORDER BY profit_calculation.Profit DESC) AS dense_rank
+        FROM  profit_calculation
+        ORDER BY PARSE_DATE('%b-%Y',profit_calculation.month))
+WHERE  dense_rank <= 5;
+
+#QUESTION-6 Create a query to get Month to Date of total revenue in each product categories of past 3 months (current date 30 DEC 2022), breakdown by date.
+WITH revenue_calculation AS
+(SELECT
+      DATE(order_items.created_at) as date,
+      inventory_items.product_category as product_categories,
+      ROUND(SUM(order_items.sale_price),2) as revenue
+FROM  `bigquery-public-data.thelook_ecommerce.order_items` order_items
+INNER JOIN
+      `bigquery-public-data.thelook_ecommerce.inventory_items` inventory_items
+ON    order_items.inventory_item_id = inventory_items.id
+WHERE DATE(order_items.created_at) BETWEEN '2022-10-01' AND '2022-12-31'
+AND   order_items.status = 'Complete' 
+GROUP BY 1,2
+ORDER BY 1,2)
+SELECT *, 
+    ROUND(SUM(revenue_calculation.revenue)OVER(PARTITION BY revenue_calculation.product_categories ORDER BY revenue_calculation.date),2) as revenue_MTD
+FROM  revenue_calculation
+WHERE revenue_calculation.date BETWEEN '2022-12-01' AND '2022-12-31'
+UNION ALL
+SELECT *,
+    ROUND(SUM(revenue_calculation.revenue)OVER(PARTITION BY revenue_calculation.product_categories ORDER BY revenue_calculation.date),2) as revenue_MTD
+FROM  revenue_calculation
+WHERE revenue_calculation.date BETWEEN '2022-11-01' AND '2022-11-30'
+UNION ALL
+SELECT
+      *,
+      ROUND(SUM(revenue_calculation.revenue)OVER(PARTITION BY revenue_calculation.product_categories ORDER BY revenue_calculation.date),2) as revenue_MTD
+FROM  revenue_calculation
+WHERE revenue_calculation.date BETWEEN '2022-10-01' AND '2022-10-31';
+
+#QUESTION-7 Find monthly growth of TPO  (# of completed orders) and Total Previous V (# of revenue) in percentage breakdown by product categories and analyze the monthly growth to gain insight (time frame Jan 2019 - Dec 2022). Ordered by time descendingly.
+WITH monthly_recap AS 
+(SELECT DATE_TRUNC(DATE(order_items.created_at),month) AS date,
+inventory_items.product_category AS product_categories,
+COUNT(order_items.id) AS order_qty,
+ROUND(SUM(order_items.sale_price),2) AS revenue
+FROM `bigquery-public-data.thelook_ecommerce.order_items` order_items
+INNER JOIN `bigquery-public-data.thelook_ecommerce.inventory_items` inventory_items
+ON order_items.inventory_item_id = inventory_items.id
+WHERE DATE(order_items.created_at) BETWEEN DATE(2019,01,01) AND DATE(2022,12,31)
+AND order_items.status = 'Complete'
+GROUP BY 1,2
+ORDER BY 1 DESC,2),
+growth AS(SELECT*,
+LAG(order_qty)OVER(PARTITION BY product_categories ORDER BY date) previous_order_qty,
+LAG(revenue)OVER(PARTITION BY product_categories ORDER BY date) previous_revenue,
+FROM monthly_recap) 
+SELECT date,
+product_categories, order_qty AS TPO,revenue AS TPV,
+CONCAT(COALESCE(ROUND((order_qty-previous_order_qty)/previous_order_qty*100),0), '%') order_growth_percentage,
+CONCAT(COALESCE(ROUND((revenue-previous_revenue)/previous_revenue*100),0), '%') revenue_growth_percentage
+FROM growth
+ORDER BY product_categories, date DESC;
