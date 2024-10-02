@@ -1,0 +1,77 @@
+# FoodSales Project (Input Data)
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+FoodSales = pd.read_excel('sampledatafoodsales.xlsx')
+FoodSales.head()
+
+# Finding and dropping rows with NaN
+nan_df = FoodSales[FoodSales.isna().any(axis=1)]
+display(nan_df.head())
+
+FoodSales = FoodSales.dropna(how='all')
+FoodSales = FoodSales.dropna(how='any')
+FoodSales.head()
+
+# Checking if the NaN were succesffully dropped
+
+nan_df = FoodSales[FoodSales.isna().any(axis=1)]
+display(nan_df.head()
+
+# Removing text in order date column
+FoodSales = FoodSales[FoodSales['Date'].astype(str).str[:2] != 'Or']
+
+# Checking if the NaN were succesffully dropped
+nan_df = FoodSales[FoodSales.isna().any(axis=1)]
+display(nan_df.head())
+
+# Removing text in order date column
+FoodSales = FoodSales[FoodSales['Date'].astype(str).str[:2] != 'Or']
+
+FoodSales['Qty'] = pd.to_numeric(FoodSales['Qty'])
+FoodSales['UnitPrice'] = pd.to_numeric(FoodSales['UnitPrice'])
+
+# Adding month column
+#all_data['Month'] = all_data['Order Date'].str[0:2]
+#all_data['Month'] = all_data['Month'].astype('int32')
+FoodSales['Month'] = pd.to_datetime(FoodSales['Date']).dt.month
+FoodSales.head()
+
+FoodSales.groupby(['Month']).sum()
+
+# Visualizing the data for Sales per Month
+
+months = range(1,13)
+print(months)
+
+plt.bar(months,FoodSales.groupby(['Month']).sum()['TotalPrice'])
+plt.xticks(months)
+plt.title('Sales per Month')
+plt.ylabel('Sales (USD$)')
+plt.xlabel('Month')
+plt.show()
+
+FoodSales.groupby(['City']).sum()
+
+# Visualizing the data for Sales per city
+
+keys = [city for city, df in FoodSales.groupby(['City'])]
+
+plt.bar(keys,FoodSales.groupby(['City']).sum()['TotalPrice'])
+plt.title('Sales by City')
+plt.ylabel('Sales (USD$)')
+plt.xlabel('City')
+plt.xticks(keys, rotation='vertical', size=8)
+plt.show()
+
+#What product sold the most? Why do you think it sold the most?
+product_group = FoodSales.groupby('Product')
+quantity_ordered = product_group.sum()['Qty']
+
+keys = [pair for pair, df in product_group]
+plt.bar(keys, quantity_ordered)
+plt.xticks(keys, rotation='vertical', size=10)
+plt.title('Total Number of Products Sold')
+plt.ylabel('Quantity Ordered')
+plt.xlabel('Product')
+plt.show()
